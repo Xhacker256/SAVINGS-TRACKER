@@ -81,281 +81,332 @@ canvas { margin-top: 20px; width: 100% !important; height: auto !important; }
 
 
 <script>
-let goal = 0, days = 0, saved = 0, currentDay = 1;
-let logText = "", dailySavings = [], currency = "UGX";
-
-const currencySymbols = { UGX: "UGX", USD: "$", EUR: "€", GBP: "£", JPY: "¥" };
-
-// Fix #1: Force canvas size so it’s never 0×0
-const canvas = document.getElementById('savingsChart');
-canvas.width = 600;
-canvas.height = 300;
-canvas.style.width = "100%";
-canvas.style.height = "auto";
-const ctx = canvas.getContext('2d');
-
-// Much more robust lightweight chart
-function drawChart() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (dailySavings.length === 0) {
-        ctx.font = "20px Arial";
-        ctx.fillStyle = "#999";
-        ctx.textAlign = "center";
-        ctx.fillText("No savings data yet", canvas.width / 2, canvas.height / 2);
-        return;
+    let goal = 0, days = 0, saved = 0, currentDay = 1;
+    let logText = "", dailySavings = [], currency = "UGX";
+    
+    const currencySymbols = { UGX: "UGX", USD: "$", EUR: "€", GBP: "£", JPY: "¥" };
+    
+    // Format number with commas
+    function formatNumberWithCommas(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
-
-    const data = dailySavings;
-    const labels = data.map((_, i) => i + 1);
-    const maxVal = Math.max(...data, goal * 0.1); // at least 10% of goal so line is visible early
-    const padding = 40;
-
-    // Background grid (optional nice touch)
-    ctx.strokeStyle = "#eee";
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= 5; i++) {
-        const y = padding + (canvas.height - padding * 2) * (i / 5);
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(canvas.width - padding / 2, y);
-        ctx.stroke();
+    
+    // Remove commas from formatted string and return number
+    function parseFormattedNumber(str) {
+        return parseFloat(str.replace(/,/g, '')) || 0;
     }
-
-    // Axes
-    ctx.strokeStyle = "#333";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, canvas.height - padding);
-    ctx.lineTo(canvas.width - padding / 2, canvas.height - padding);
-    ctx.stroke();
-
-    // Plot line
-    ctx.strokeStyle = "#4c7cff";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-
-    data.forEach((value, i) => {
-        const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
-        const y = canvas.height - padding - (value / maxVal) * (canvas.height - padding * 2);
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Fill area under curve
-    ctx.globalAlpha = 0.2;
-    ctx.fillStyle = "#4c7cff";
-    ctx.lineTo(canvas.width - padding / 2, canvas.height - padding);
-    ctx.lineTo(padding, canvas.height - padding);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Data points
-    ctx.fillStyle = "#4c7cff";
-    data.forEach((value, i) => {
-        const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
-        const y = canvas.height - padding - (value / maxVal) * (canvas.height - padding * 2);
-        ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2);
-        ctx.fill();
-    });
-
-    // Labels (X-axis: Day 1, Day 2…)
-    ctx.fillStyle = "#333";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "center";
-    labels.forEach((day, i) => {
-        const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
-        ctx.fillText(`Day ${day}`, x, canvas.height - 10);
-    });
-
-    // Y-axis label
-    ctx.save();
-    ctx.translate(12, canvas.height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.font = "14px Arial";
-    ctx.fillText("Amount Saved", 0, 0);
-    ctx.restore();
-}
-
-function updateChart() {
-    drawChart();
-}
-
-// ————————————————————————
-// Rest of your functions (unchanged except one small fix in downloadLog)
-// ————————————————————————
-
-function saveProgress() {
-    localStorage.setItem("goal", goal);
-    localStorage.setItem("days", days);
-    localStorage.setItem("saved", saved);
-    localStorage.setItem("currentDay", currentDay);
-    localStorage.setItem("logText", logText);
-    localStorage.setItem("dailySavings", JSON.stringify(dailySavings));
-    localStorage.setItem("currency", currency);
-}
-
-function updateDisplay() {
-    const remaining = Math.max(goal - saved, 0);
-    const percent = goal > 0 ? (saved / goal) * 100 : 0;
-    const symbol = currencySymbols[currency] || currency;
-
-    document.getElementById("dayCounter").innerText = `Day ${currentDay <= days ? currentDay : days} / ${days}`;
-    document.getElementById("progressText").innerText = `Progress: ${symbol} ${saved.toLocaleString()} / ${symbol} ${goal.toLocaleString()}`;
-    document.getElementById("remainingText").innerText = `Remaining: ${symbol} ${remaining.toLocaleString()}`;
-    document.getElementById("percentText").innerText = `Completed: ${percent.toFixed(2)}%`;
-
-    const bar = document.getElementById("progressBar");
-    bar.style.width = percent + "%";
-    bar.innerText = percent.toFixed(1) + "%";
-}
-
-function updatePlaceholders() {
-    const symbol = currencySymbols[currency] || currency;
-    document.getElementById("goal").placeholder = `Enter your goal in ${symbol}`;
-    document.getElementById("dailySave").placeholder = `Enter today's savings in ${symbol}`;
-}
-
-function startTracker() {
-    goal = Number(document.getElementById("goal").value);
-    days = Number(document.getElementById("days").value);
-    currency = document.getElementById("currency").value;
-    if (goal <= 0 || days <= 0) { alert("Please enter valid goal and days."); return; }
-
-    saved = Number(localStorage.getItem("saved") || 0);
-    currentDay = Number(localStorage.getItem("currentDay") || 1);
-    logText = localStorage.getItem("logText") || "";
-    dailySavings = JSON.parse(localStorage.getItem("dailySavings") || "[]");
-
-    document.getElementById("trackerArea").style.display = "block";
-    saveProgress();
-    updateChart();
-    updateDisplay();
-    updatePlaceholders();
-}
-
-function addSaving() {
-    const amount = Number(document.getElementById("dailySave").value);
-    if (amount <= 0) { alert("Please enter a valid amount."); return; }
-
-    saved += amount;
-    dailySavings.push(amount);
-    currentDay++;
-
-    const remaining = Math.max(goal - saved, 0);
-    const percent = (saved / goal) * 100;
-    const symbol = currencySymbols[currency] || currency;
-
-    const logEntry = `Day ${currentDay - 1} / ${days}:
-Saved: ${symbol} ${amount.toLocaleString()}
-Total Saved: ${symbol} ${saved.toLocaleString()}
-Remaining: ${symbol} ${remaining.toLocaleString()}
-Progress: ${percent.toFixed(2)}%
-
-`;
-    logText += logEntry;
-    document.getElementById("logBox").innerText = logText;
-
-    saveProgress();
-    updateChart();
-    updateDisplay();
-
-    if (saved >= goal) alert("Goal reached!");
-    document.getElementById("dailySave").value = "";
-}
-
-function resetTracker() {
-    if (confirm("Reset everything?")) {
-        localStorage.clear();
-        location.reload();
-    }
-}
-
-function downloadLog() {
-    if (dailySavings.length === 0) return alert("No data yet");
-    let csv = "Day,Amount Saved,Total Saved,Remaining,Progress (%)\n";
-    let total = 0;
-    dailySavings.forEach((amt, i) => {
-        total += amt;
-        const rem = Math.max(goal - total, 0);
-        const pct = (total / goal) * 100;
-        csv += `${i + 1},${amt},${total},${rem},${pct.toFixed(2)}\n`;
-    });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "savings_log.csv"; a.click();
-}
-
-function downloadChart() {
-    const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
-    a.download = "savings_chart.png";
-    a.click();
-}
-
-// Rest of your code (notifications, service worker, manifest, event listeners) stays exactly the same
-// ————————————————————————
-
-function requestNotificationPermission() {
-    if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
-    }
-}
-
-function notifyDaily() {
-    if ("Notification" in window && Notification.permission === "granted" && saved < goal) {
-        const s = currencySymbols[currency] || currency;
-        new Notification("Save today!", {
-            body: `Goal: ${s} ${goal.toLocaleString()} | Saved: ${s} ${saved.toLocaleString()}`,
+    
+    // Apply formatting on input (for goal and daily save)
+    function setupNumberFormatting(inputId) {
+        const input = document.getElementById(inputId);
+    
+        input.addEventListener("input", function(e) {
+            let value = e.target.value.replace(/,/g, ''); // Remove existing commas
+            if (!isNaN(value) && value !== '') {
+                e.target.value = formatNumberWithCommas(value);
+            }
+        });
+    
+        // Optional: Clean value on blur (in case user leaves invalid input)
+        input.addEventListener("blur", function(e) {
+            let num = parseFormattedNumber(e.target.value);
+            if (!isNaN(num) && num > 0) {
+                e.target.value = formatNumberWithCommas(num);
+            }
         });
     }
-}
-setInterval(notifyDaily, 24 * 60 * 60 * 1000);
-
-window.onload = () => {
-    if (localStorage.getItem("goal")) {
-        goal = Number(localStorage.getItem("goal"));
-        days = Number(localStorage.getItem("days"));
-        currency = localStorage.getItem("currency") || "UGX";
-        document.getElementById("goal").value = goal;
-        document.getElementById("days").value = days;
-        document.getElementById("currency").value = currency;
-        startTracker();
+    
+    // Fix canvas size
+    const canvas = document.getElementById('savingsChart');
+    canvas.width = 600;
+    canvas.height = 300;
+    canvas.style.width = "100%";
+    canvas.style.height = "auto";
+    const ctx = canvas.getContext('2d');
+    
+    // Chart drawing function (unchanged)
+    function drawChart() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+        if (dailySavings.length === 0) {
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "#999";
+            ctx.textAlign = "center";
+            ctx.fillText("No savings data yet", canvas.width / 2, canvas.height / 2);
+            return;
+        }
+    
+        const data = dailySavings.map((_, i) => dailySavings.slice(0, i + 1).reduce((a, b) => a + b, 0));
+        const labels = data.map((_, i) => i + 1);
+        const maxVal = Math.max(...data, goal * 0.1);
+        const padding = 40;
+    
+        ctx.strokeStyle = "#eee";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (canvas.height - padding * 2) * (i / 5);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(canvas.width - padding / 2, y);
+            ctx.stroke();
+        }
+    
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, canvas.height - padding);
+        ctx.lineTo(canvas.width - padding / 2, canvas.height - padding);
+        ctx.stroke();
+    
+        ctx.strokeStyle = "#4c7cff";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+    
+        data.forEach((value, i) => {
+            const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
+            const y = canvas.height - padding - (value / maxVal) * (canvas.height - padding * 2);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = "#4c7cff";
+        ctx.lineTo(canvas.width - padding / 2, canvas.height - padding);
+        ctx.lineTo(padding, canvas.height - padding);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    
+        ctx.fillStyle = "#4c7cff";
+        data.forEach((value, i) => {
+            const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
+            const y = canvas.height - padding - (value / maxVal) * (canvas.height - padding * 2);
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    
+        ctx.fillStyle = "#333";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "center";
+        labels.forEach((day, i) => {
+            const x = padding + (canvas.width - padding * 1.5) * (i / (data.length - 1 || 1));
+            ctx.fillText(`Day ${day}`, x, canvas.height - 10);
+        });
+    
+        ctx.save();
+        ctx.translate(12, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.font = "14px Arial";
+        ctx.fillText("Amount Saved", 0, 0);
+        ctx.restore();
     }
-};
-
-document.getElementById("currency").addEventListener("change", () => {
-    currency = document.getElementById("currency").value;
-    saveProgress(); updateDisplay(); updatePlaceholders(); updateChart();
-});
-document.getElementById("startBtn").addEventListener("click", startTracker);
-document.getElementById("addSaveBtn").addEventListener("click", addSaving);
-document.getElementById("resetBtn").addEventListener("click", resetTracker);
-document.getElementById("downloadLogBtn").addEventListener("click", downloadLog);
-document.getElementById("downloadChartBtn").addEventListener("click", downloadChart);
-
-// Service Worker & Manifest (unchanged)
-if ("serviceWorker" in navigator) {
-    const sw = `
-        const CACHE = 'savings-v1';
-        self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./']))));
-        self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+    
+    function updateChart() {
+        drawChart();
+    }
+    
+    function saveProgress() {
+        localStorage.setItem("goal", goal);
+        localStorage.setItem("days", days);
+        localStorage.setItem("saved", saved);
+        localStorage.setItem("currentDay", currentDay);
+        localStorage.setItem("logText", logText);
+        localStorage.setItem("dailySavings", JSON.stringify(dailySavings));
+        localStorage.setItem("currency", currency);
+    }
+    
+    function updateDisplay() {
+        const remaining = Math.max(goal - saved, 0);
+        const percent = goal > 0 ? (saved / goal) * 100 : 0;
+        const symbol = currencySymbols[currency] || currency;
+    
+        document.getElementById("dayCounter").innerText = `Day ${currentDay <= days ? currentDay : days} / ${days}`;
+        document.getElementById("progressText").innerText = `Progress: ${symbol} ${saved.toLocaleString()} / ${symbol} ${goal.toLocaleString()}`;
+        document.getElementById("remainingText").innerText = `Remaining: ${symbol} ${remaining.toLocaleString()}`;
+        document.getElementById("percentText").innerText = `Completed: ${percent.toFixed(2)}%`;
+    
+        const bar = document.getElementById("progressBar");
+        bar.style.width = percent + "%";
+        bar.innerText = percent.toFixed(1) + "%";
+    }
+    
+    function updatePlaceholders() {
+        const symbol = currencySymbols[currency] || currency;
+        document.getElementById("goal").placeholder = `e.g. 1000000 → ${symbol} 1,000,000`;
+        document.getElementById("dailySave").placeholder = `Enter today's savings in ${symbol}`;
+    }
+    
+    function startTracker() {
+        const rawGoal = document.getElementById("goal").value;
+        goal = parseFormattedNumber(rawGoal);
+        days = Number(document.getElementById("days").value);
+        currency = document.getElementById("currency").value;
+    
+        if (goal <= 0 || days <= 0 || isNaN(goal)) {
+            alert("Please enter a valid goal amount and number of days.");
+            return;
+        }
+    
+        saved = Number(localStorage.getItem("saved") || 0);
+        currentDay = Number(localStorage.getItem("currentDay") || 1);
+        logText = localStorage.getItem("logText") || "";
+        dailySavings = JSON.parse(localStorage.getItem("dailySavings") || "[]");
+    
+        document.getElementById("trackerArea").style.display = "block";
+        saveProgress();
+        updateChart();
+        updateDisplay();
+        updatePlaceholders();
+    }
+    
+    function addSaving() {
+        const rawAmount = document.getElementById("dailySave").value;
+        const amount = parseFormattedNumber(rawAmount);
+    
+        if (isNaN(amount) || amount <= 0) {
+            alert("Please enter a valid amount.");
+            return;
+        }
+    
+        saved += amount;
+        dailySavings.push(amount);
+        currentDay++;
+    
+        const remaining = Math.max(goal - saved, 0);
+        const percent = (saved / goal) * 100;
+        const symbol = currencySymbols[currency] || currency;
+    
+        const logEntry = `Day ${currentDay - 1} / ${days}:
+    Saved: ${symbol} ${amount.toLocaleString()}
+    Total Saved: ${symbol} ${saved.toLocaleString()}
+    Remaining: ${symbol} ${remaining.toLocaleString()}
+    Progress: ${percent.toFixed(2)}%
+    
     `;
-    navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw], {type: 'application/javascript'})));
-}
+        logText += logEntry;
+        document.getElementById("logBox").innerText = logText;
+    
+        saveProgress();
+        updateChart();
+        updateDisplay();
+    
+        if (saved >= goal) {
+            alert("🎉 Congratulations! You've reached your savings goal!");
+        }
+        document.getElementById("dailySave").value = "";
+    }
+    
+    function resetTracker() {
+        if (confirm("Are you sure you want to reset all progress?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+    
+    function downloadLog() {
+        if (dailySavings.length === 0) return alert("No data to download yet");
+        let csv = "Day,Amount Saved,Total Saved,Remaining,Progress (%)\n";
+        let total = 0;
+        dailySavings.forEach((amt, i) => {
+            total += amt;
+            const rem = Math.max(goal - total, 0);
+            const pct = (total / goal) * 100;
+            csv += `${i + 1},${amt},${total},${rem},${pct.toFixed(2)}\n`;
+        });
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "savings_log.csv"; a.click();
+    }
+    
+    function downloadChart() {
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = "savings_chart.png";
+        a.click();
+    }
+    
+    // Notification functions (unchanged)
+    function requestNotificationPermission() {
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+    }
+    
+    function notifyDaily() {
+        if ("Notification" in window && Notification.permission === "granted" && saved < goal) {
+            const s = currencySymbols[currency] || currency;
+            new Notification("Time to Save!", {
+                body: `Goal: ${s} ${goal.toLocaleString()} | Saved: ${s} ${saved.toLocaleString()}`,
+            });
+        }
+    }
+    setInterval(notifyDaily, 24 * 60 * 60 * 1000);
+    
+    // On load: Restore data + format goal input if exists
+    window.onload = () => {
+        // Set up live comma formatting
+        setupNumberFormatting("goal");
+        setupNumberFormatting("dailySave");
+    
+        if (localStorage.getItem("goal")) {
+            goal = Number(localStorage.getItem("goal"));
+            days = Number(localStorage.getItem("days"));
+            currency = localStorage.getItem("currency") || "UGX";
+            saved = Number(localStorage.getItem("saved") || 0);
+            currentDay = Number(localStorage.getItem("currentDay") || 1);
+            logText = localStorage.getItem("logText") || "";
+            dailySavings = JSON.parse(localStorage.getItem("dailySavings") || "[]");
+    
+            // Restore formatted goal
+            document.getElementById("goal").value = formatNumberWithCommas(goal);
+            document.getElementById("days").value = days;
+            document.getElementById("currency").value = currency;
+    
+            document.getElementById("trackerArea").style.display = "block";
+            updateDisplay();
+            updateChart();
+            updatePlaceholders();
+        }
+    
+        requestNotificationPermission();
+    };
+    
+    // Event Listeners
+    document.getElementById("currency").addEventListener("change", () => {
+        currency = document.getElementById("currency").value;
+        saveProgress(); 
+        updateDisplay(); 
+        updatePlaceholders();
+    });
+    document.getElementById("startBtn").addEventListener("click", startTracker);
+    document.getElementById("addSaveBtn").addEventListener("click", addSaving);
+    document.getElementById("resetBtn").addEventListener("click", resetTracker);
+    document.getElementById("downloadLogBtn").addEventListener("click", downloadLog);
+    document.getElementById("downloadChartBtn").addEventListener("click", downloadChart);
+    
+    // Service Worker & Manifest (unchanged)
+    if ("serviceWorker" in navigator) {
+        const sw = `
+            const CACHE = 'savings-v1';
+            self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./']))));
+            self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+        `;
+        navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw], {type: 'application/javascript'})));
+    }
+    
+    const manifestJSON = {
+        name: "Savings Tracker", short_name: "Savings",
+        start_url: ".", display: "standalone",
+        background_color: "#f2f6ff", theme_color: "#2a4d9b",
+        icons: [{src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABUUlEQVQ4T2P4//8/AwXgP3oG4P0Y2AA+fxWlT2Z/BmDwaHgImbDGMI8jEDgfIwB68IByMI4s1A0sH5DxASv4HAY2JmYGBgYk3v/h8w+AG5l5ITBv4fANtVAdgJiGQx0AyGZgYmBiYWRkZ2BmYGBgYjFx3+ZsDHwGMG3bU+I9rG0PrA4GPIvP0IsgGqAZ4EgAfJC5gQMGJiA0jUBZIEYAHmF8w2YDRgzDFRgYGhkYGBgYGBgYGBQYADxYgfGJu2nLwAAAABJRU5ErkJggg==", sizes: "16x16", type: "image/png"}]
+    };
+    document.getElementById('manifestLink').href = URL.createObjectURL(new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'}));
+    </script>
 
-const manifestJSON = {
-    name: "Savings Tracker", short_name: "Savings",
-    start_url: ".", display: "standalone",
-    background_color: "#f2f6ff", theme_color: "#2a4d9b",
-    icons: [{src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABUUlEQVQ4T2P4//8/AwXgP3oG4P0Y2AA+fxWlT2Z/BmDwaHgImbDGMI8jEDgfIwB68IByMI4s1A0sH5DxASv4HAY2JmYGBgYk3v/h8w+AG5l5ITBv4fANtVAdgJiGQx0AyGZgYmBiYWRkZ2BmYGBgYjFx3+ZsDHwGMG3bU+I9rG0PrA4GPIvP0IsgGqAZ4EgAfJC5gQMGJiA0jUBZIEYAHmF8w2YDRgzDFRgYGhkYGBgYGBgYGBQYADxYgfGJu2nLwAAAABJRU5ErkJggg==", sizes: "16x16", type: "image/png"}]
-};
-document.getElementById('manifestLink').href = URL.createObjectURL(new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'}));
-</script></body>
+
+</body>
 </html>
